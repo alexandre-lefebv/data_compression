@@ -1,26 +1,40 @@
 import numpy as np
+
+from tqdm import tqdm, trange
 from readImage import Video,height,width
 
 
 def LZW_encode(data):
     """ Encode a list of symbols, return a stream of bit. Data is expected
-    to be an array_like of uint8.
+    to be an array_like of int.
     Bit stream format :
-    | (1) uint<8> : codewords length, in number of additional bits.
-    |               -> codewords length = 8 + <value>
+    | (1) sign+uint8 : min symbol
+    | (1) uint9 : range between min and max symbol in data (data.max-data.min+1)
+    | (1) uint<8> : codewords length in number of bits
     | (n) uint<k> : <n> codewords of size <k> bits.
     """
     
-    if data.max()>255 or data.min()<0:
-        print("LZW_encode error: data value outside of range [0,255] ")
+    bitstream = ''
+    data = np.array(data)
     
-    current_codeword = 255
-    omega = (data[0],)
-    dictionary = {(k,):format(k,"b") for k in range(256)}
+    if data.max()>255 or data.min()<-255:
+        print("LZW_encode error: data value outside of range [-255,255] ")
+        print(data.min(),data.max())
+    
+    m = data.min()
+    nb_symbols = data.max()-m+1
+    bitstream+=format(m<0,"b")                  # Sign of m
+    bitstream+=format(abs(m),"b").zfill(8)      # 0,+255
+    bitstream+=format(nb_symbols,"b").zfill(9)  # 0,511
+
+    current_codeword = nb_symbols
+    omega = (data[0]-m,)
+    dictionary = {(k,):format(k,"b") for k in range(nb_symbols)}
     words_list = []
 
     # Fill the dictionary, list the words
-    for K in data[1:]:
+    for k in tqdm(data[1:],desc="Building the dictionary"):
+        K = k-m
         new_omega = omega+(K,)
         
         if not new_omega in dictionary:
@@ -37,10 +51,10 @@ def LZW_encode(data):
     words_list.append(dictionary[omega])
     
     # Complete the codewords so that they all have the same length
-    nb_bits = int(np.log2(len(dictionary)-1))+1
-    bitstream = format(nb_bits-8,"b").zfill(8)
-    for word in words_list:
-        bitstream += word.zfill(nb_bits)
+    codeword_sz = int(np.log2(len(dictionary)-1))+1
+    bitstream += format(codeword_sz,"b").zfill(8)
+    for word in tqdm(words_list,desc="Encoding"):
+        bitstream += word.zfill(codeword_sz)
     
     return bitstream
 
@@ -49,18 +63,21 @@ def LZW_decode(bitstream):
     """ Decode a stream of bits, return a list of symbols. bitstream is
     expected to be a string composed of '0' and '1'.
     Bit stream format :
-    | (1) uint<8> : codewords length, in number of additional bits.
-    |               -> codewords length = 8 + <value>
+    | (1) sign+uint8 : min symbol
+    | (1) uint9 : range between min and max symbol in data (data.max-data.min+1)
+    | (1) uint<8> : codewords length in number of bits
     | (n) uint<k> : <n> codewords of size <k> bits.
     """
-    codeword_sz = int(bitstream[:8], base=2)+8
-    reverse_dict = {format(k,"b").zfill(codeword_sz):[k] for k in range(0,256)}
-    symbols_list = list(reverse_dict[bitstream[8:8+codeword_sz]])
-    current_codeword = 255
-    omega_prev = reverse_dict[bitstream[8:8+codeword_sz]]
-    
+    sign = int(bitstream[0], base=2)
+    m =    int(bitstream[1:9], base=2)*((-1)**sign)
+    nb_symbols = int(bitstream[9:18], base=2)
+    codeword_sz = int(bitstream[18:26], base=2)
+    reverse_dict = {format(k,"b").zfill(codeword_sz):[k+m] for k in range(nb_symbols)}
+    symbols_list = list(reverse_dict[bitstream[26:26+codeword_sz]])
+    current_codeword = nb_symbols
+    omega_prev = reverse_dict[bitstream[26:26+codeword_sz]]
     # Fill the dictionary and decode
-    for k in range(8+codeword_sz,len(bitstream),codeword_sz):
+    for k in trange(26+codeword_sz,len(bitstream),codeword_sz,desc="Decoding"):
         codeword = bitstream[k:k+codeword_sz]
         
         # Decode
