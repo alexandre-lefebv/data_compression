@@ -36,6 +36,11 @@ class Video:
         compY = np.frombuffer(self.fd.read(width*height)      , dtype=np.uint8).reshape((height,width))
         compU = np.frombuffer(self.fd.read(width//2*height//2), dtype=np.uint8).reshape((height//2,width//2))
         compV = np.frombuffer(self.fd.read(width//2*height//2), dtype=np.uint8).reshape((height//2,width//2))
+
+        compY = np.array(compY,dtype=int)
+        compU = np.array(compU,dtype=int)
+        compV = np.array(compV,dtype=int)
+
         self.EOF = self.fd.tell() == self.file_size
         return compY, compU, compV
     
