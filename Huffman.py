@@ -1,7 +1,6 @@
 import numpy as np
 
 from tqdm import tqdm, trange
-from readImage import Video,height,width
 
 
 def Huffman_code(min_symbol, proba_table, tree_only=False):
