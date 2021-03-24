@@ -92,4 +92,4 @@ def LZW_decode(bitstream):
         
         omega_prev = list(omega)
     
-    return symbols_list
+    return np.array(symbols_list)

@@ -1,1 +1,1 @@
-# data_compression
+An example of use can be found in main.ipynb

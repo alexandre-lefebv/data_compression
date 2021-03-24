@@ -1,7 +1,5 @@
 import numpy as np
 
-from tqdm import tqdm, trange
-
 def Difference_image_compute(data):
     """ Compute the images successive difference Ik+1 - Ik, I0 remain unchanged
     Args:
@@ -15,7 +13,7 @@ def Difference_image_compute(data):
 
     modified_data = np.zeros_like(data)
     modified_data[0] = data[0]
-    for k in trange(1,nb_frames,desc="Computing difference images"):
+    for k in range(1,nb_frames):
         modified_data[k] = data[k]-data[k-1]
     
     return modified_data
@@ -34,7 +32,10 @@ def Difference_image_reverse(modified_data):
     nb_frames  = modified_data.shape[0]
 
     data = np.array(modified_data)
-    for k in trange(1,nb_frames,desc="Reversing difference images"):
+    for k in range(1,nb_frames):
         data[k] += data[k-1]
     
+    
+    data[data<0]=0
+    data[data>255]=255
     return data

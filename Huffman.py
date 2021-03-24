@@ -82,7 +82,7 @@ def Huffman_decode(bitstream):
     """ Decode a stream of bits, return a list of symbols. bitstream is
     expected to be a string composed of '0' and '1'.
     Bit stream format :
-    | (1) sign,uint8 : min symbol
+    | (1) sign+uint8 : min symbol
     | (1) uint9 : proba table len <n>
     | (n) uint8 : proba of each symbol (proba is equal to <value>/255)
     | (remain) bit : code elements

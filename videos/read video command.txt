@@ -1,0 +1,1 @@
+mplayer <...>.qcif -demuxer rawvideo -rawvideo qcif

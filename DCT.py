@@ -36,7 +36,7 @@ P_chromi= np.array([[17,18,24,47,99,99,99,99],
                     [99,99,99,99,99,99,99,99],
                     [99,99,99,99,99,99,99,99],
                     [99,99,99,99,99,99,99,99],
-                    [99,99,99,99,99,99,99,99]])//5
+                    [99,99,99,99,99,99,99,99]])/6
 
 # Reading order
 diag_reading =  np.array([[0, 1, 5, 6, 14,15,27,28],
@@ -50,34 +50,36 @@ diag_reading =  np.array([[0, 1, 5, 6, 14,15,27,28],
 reading_order = np.argsort(diag_reading)
 
 
-def DCT_compute(data_xy,Q=1):
+def DCT_compute(data_xy,Q='opti'):
     """ Compute the DCT of all the images of the video, apply a psychovisual
-    matrix, read the coeff along the diagonals, compute the difference with the
-    block on the left if it existe.
+    matrix, read the coeff along the diagonals.
 
     Args:
         data_xy (array(nb_frames,-1))
-        Q (int, default=100): % of the coefficients of the psychovisual matrix
-            to use for quantification, default is the base matrix.
-        nb_diag (int, default=5): number of diagonals of coefficients to keep,
-            must be in [1:16[.
+        Q (int or 'opti', default='opti'): % of the coefficients of the
+            psychovisual matrix to use for quantification, default is the
+            smallest value of Q that allows to quantify on -255,+255. If the
+            value passed is not high enought to squeeze the quantized values in
+            the range -255,+255 the optimal value will e used  instead and a
+            warning message is displayed.
     Return:
         data_uv (array): The first value is an int,
             the optimal Q for quantization. Q = <value>/128*100 % of the base
             matrix.
     """
-
+    if type(Q) == int:
+        Q/=100
     frame_size = width*height+2*width//2*height//2
     nb_frames = data_xy.size//frame_size
     sep1 = height*width
     sep2 = sep1+height//2*width//2
 
     if data_xy.size % frame_size != 0:
-        print("DCT_compute error: invalide shape. Expected (nb_frames,144,176),\
-               got "+str(data_xy.shape))
-    data_xy = data_xy.reshape(nb_frames,frame_size)
-    data_xy-= 128 # DCT is meant for values in range -128,+128.
-
+        print("DCT_compute error: invalide shape. Expected (nb_frames,"\
+              "frame_size) with frame_size = "+str(frame_size)+", got "\
+              +str(data_xy.shape))
+    data_xy = np.array(data_xy).reshape(nb_frames,frame_size)
+    #data_xy-= 128 # DCT is meant for values in range -128,+128.
 
     # Compute the DCT
     optimal_Q = 0
@@ -109,32 +111,34 @@ def DCT_compute(data_xy,Q=1):
                     temp_Q = abs(block_uv/P_chromi).max()/255
                     if temp_Q>optimal_Q:
                         optimal_Q=temp_Q
-
+    
     # Quantization coeffs
+    if Q == 'opti':
+        Q=optimal_Q
+        print("DCT: optimal Q as been set to ",optimal_Q*100,"% of the "\
+              "psychovisual matrices values. ")
     if Q<optimal_Q:
-        print("DCT error: quantization will not fit all the values in"\
+        print("DCT error: quantization will not fit all the values in "\
               "[-255-255]. Q should be higher than ",optimal_Q*100,"%. Min"\
               "value selected instead.")
         Q=optimal_Q
+    if Q>1.99:
+        print("DCT error: maximum Q value is 199")
+        Q = 1.99
 
     list_encoded_uv = [np.array([int(np.ceil(Q*128))])]
 
     # Quantization, diagonal reading and runlength encode
     current_block_index = 0
-    previous_first_coeff = 0
     for dummy0 in range(nb_frames):
         # Process y
         for dummy_1 in range(height//8*width//8):
             block = list_block_uv[current_block_index]
             quantized_block = np.array(np.round(block/(P_lumi*Q)),dtype=int)
             quantized_vector= quantized_block.flatten()[reading_order]
-
-            encoded_uv    = Runlength_encode(quantized_vector)
-            encoded_uv[0]-= previous_first_coeff
-
-            previous_first_coeff = quantized_vector[0]
+            encoded_uv = Runlength_encode(quantized_vector)
+            
             current_block_index += 1
-
             list_encoded_uv.append(encoded_uv)
 
         # Process u and v
@@ -143,13 +147,9 @@ def DCT_compute(data_xy,Q=1):
                 block = list_block_uv[current_block_index]
                 quantized_block = np.array(np.round(block/(P_chromi*Q)),dtype=int)
                 quantized_vector= quantized_block.flatten()[reading_order]
+                encoded_uv = Runlength_encode(quantized_vector)
 
-                encoded_uv    = Runlength_encode(quantized_vector)
-                encoded_uv[0]-= previous_first_coeff
-
-                previous_first_coeff = quantized_vector[0]
                 current_block_index += 1
-
                 list_encoded_uv.append(encoded_uv)
 
     data_uv = np.concatenate(list_encoded_uv)
@@ -170,33 +170,38 @@ def DCT_inverse(data_uv):
     block_in_y      = height//8*width//8
     frame_size      = width*height+2*width//2*height//2
     
+    data_uv = np.array(data_uv).flatten()
+    
     block_start_id   = 1
     block_end_id     = block_start_id+1
     Q = data_uv[0]/128
 
     list_block_xy    = []
     current_block_index = 0
-    previous_first_coeff = 0
+    pbar = tqdm(total=data_uv.size,desc="DCT inverse")
+    block_end_id_prev = 0
     # Runlengh decode, reconstruct block, reverse quantification, reverse DCT
     while block_end_id < data_uv.size:
         block_end_id += 2
         if data_uv[block_end_id-1]==0:
-
+            pbar.update(block_end_id-block_end_id_prev)
+            block_end_id_prev = block_end_id
             encoded_uv = data_uv[block_start_id:block_end_id]
             quantized_vector     = Runlength_decode(encoded_uv)
-            quantized_vector[0] += previous_first_coeff
-            previous_first_coeff = quantized_vector[0]
             quantized_block   = quantized_vector[diag_reading].reshape((8,8))
+            
             if current_block_index%block_per_frame < block_in_y:
-                block_uv = np.round(quantized_block*P_lumi*Q)
+                block_uv = quantized_block*P_lumi*Q
             else:
-                block_uv = np.round(quantized_block*P_chromi*Q)
+                block_uv = quantized_block*P_chromi*Q
+            
             block_xy = DCT_inverse_1block(block_uv)
             list_block_xy.append(block_xy)
 
             block_start_id = block_end_id
             block_end_id  += 1
             current_block_index+=1
+    pbar.close()
 
     # Check that there is no error with the number of blocks
     if (current_block_index)%block_per_frame != 0:
@@ -207,9 +212,7 @@ def DCT_inverse(data_uv):
     # Reconstruct the frames
     nb_blocks = current_block_index
     nb_frames = nb_blocks//block_per_frame
-    # block_per_frame
-    # block_in_y
-    data_xy   = np.zeros((nb_frames,frame_size))
+    data_xy   = np.zeros((nb_frames,frame_size),dtype=int)
 
     for k in range(nb_frames):
         frame_block = list_block_xy[k*block_per_frame:(k+1)*block_per_frame]
@@ -227,14 +230,16 @@ def DCT_inverse(data_uv):
         v_blocks.shape = (height//8//2,width//8//2,8,8)
         data_xy[k,-height*width//4:] = v_blocks.swapaxes(1,2).flatten()
 
-    data_xy += 128
+    #data_xy += 128
+    data_xy[data_xy<0]=0
+    data_xy[data_xy>255]=255
 
     return data_xy
 
 def DCT_compute_1block(block_xy):
     """ Compute the DCT for one bloc. """
 
-    block_uv = np.zeros((8,8),dtype=float)
+    block_uv = np.zeros((8,8),dtype=int)
     for u in range(8):
         for v in range(8):
             block_uv[u,v] = np.sum(block_xy*vect_uv[u,v,:,:])
@@ -247,7 +252,7 @@ def DCT_inverse_1block(block_uv):
     block_xy = np.zeros((8,8),dtype=float)
     for x in range(8):
         for y in range(8):
-            block_xy[x,y] = np.sum(block_uv*vect_uv[:,:,x,y])
+            block_xy[x,y] = int(np.round(np.sum(block_uv*vect_uv[:,:,x,y])))
 
     return block_xy
 
@@ -279,7 +284,7 @@ def Runlength_decode(data):
     res = np.zeros(64,dtype=int)
     res[0]=data[0]
     current_pos = 1
-    for k in range(1,data.size,2):
+    for k in range(1,data.size-2,2):
         nb_zeros,value = data[k],data[k+1]
         current_pos+=nb_zeros
         res[current_pos]=value
