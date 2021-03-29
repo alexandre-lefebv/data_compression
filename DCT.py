@@ -1,11 +1,10 @@
 import numpy as np
 from numpy import pi, cos
 
-from tqdm import tqdm, trange
-
 # Format for qcif images
 width = 176
 height = 144
+frame_size = width*height+2*width//2*height//2
 
 # Base for the DCT
 vect_uv = np.zeros((8,8,8,8))
@@ -50,7 +49,7 @@ diag_reading =  np.array([[0, 1, 5, 6, 14,15,27,28],
 reading_order = np.argsort(diag_reading)
 
 
-def DCT_compute(data_xy,Q='opti'):
+def DCT_compute(data_xy,offset=0,Q='opti'):
     """ Compute the DCT of all the images of the video, apply a psychovisual
     matrix, read the coeff along the diagonals.
 
@@ -69,7 +68,6 @@ def DCT_compute(data_xy,Q='opti'):
     """
     if type(Q) == int:
         Q/=100
-    frame_size = width*height+2*width//2*height//2
     nb_frames = data_xy.size//frame_size
     sep1 = height*width
     sep2 = sep1+height//2*width//2
@@ -79,12 +77,17 @@ def DCT_compute(data_xy,Q='opti'):
               "frame_size) with frame_size = "+str(frame_size)+", got "\
               +str(data_xy.shape))
     data_xy = np.array(data_xy).reshape(nb_frames,frame_size)
-    #data_xy-= 128 # DCT is meant for values in range -128,+128.
+    
+    if type(offset) == int :
+        offset = [offset]
+    n = len(offset)
+    for frame_id in range(nb_frames):
+        data_xy[frame_id] -= offset[frame_id%n] # DCT is meant for values centered around 0.
 
     # Compute the DCT
     optimal_Q = 0
     list_block_uv = []
-    for k in trange(nb_frames,desc="DCT"):
+    for k in range(nb_frames):
         y = data_xy[k,    :sep1].reshape(height,width)
         u = data_xy[k,sep1:sep2].reshape(height//2,width//2)
         v = data_xy[k,sep2:   ].reshape(height//2,width//2)
@@ -94,6 +97,7 @@ def DCT_compute(data_xy,Q='opti'):
             for Y in range(0,width,8):
                 block_xy = y[X:X+8,Y:Y+8]
                 block_uv = DCT_compute_1block(block_xy)
+                temp = block_uv[0,0]
                 list_block_uv.append(block_uv)
 
                 temp_Q = abs(block_uv/P_lumi).max()/255
@@ -106,6 +110,7 @@ def DCT_compute(data_xy,Q='opti'):
                 for Y in range(0,width//2,8):
                     block_xy = img[X:X+8,Y:Y+8]
                     block_uv = DCT_compute_1block(block_xy)
+                    temp = block_uv[0,0]
                     list_block_uv.append(block_uv)
 
                     temp_Q = abs(block_uv/P_chromi).max()/255
@@ -115,8 +120,8 @@ def DCT_compute(data_xy,Q='opti'):
     # Quantization coeffs
     if Q == 'opti':
         Q=optimal_Q
-        print("DCT: optimal Q as been set to ",optimal_Q*100,"% of the "\
-              "psychovisual matrices values. ")
+        # print("DCT: optimal Q as been set to ",optimal_Q*100,"% of the "\
+        #      "psychovisual matrices values. ")
     if Q<optimal_Q:
         print("DCT error: quantization will not fit all the values in "\
               "[-255-255]. Q should be higher than ",optimal_Q*100,"%. Min"\
@@ -137,7 +142,6 @@ def DCT_compute(data_xy,Q='opti'):
             quantized_block = np.array(np.round(block/(P_lumi*Q)),dtype=int)
             quantized_vector= quantized_block.flatten()[reading_order]
             encoded_uv = Runlength_encode(quantized_vector)
-            
             current_block_index += 1
             list_encoded_uv.append(encoded_uv)
 
@@ -148,7 +152,6 @@ def DCT_compute(data_xy,Q='opti'):
                 quantized_block = np.array(np.round(block/(P_chromi*Q)),dtype=int)
                 quantized_vector= quantized_block.flatten()[reading_order]
                 encoded_uv = Runlength_encode(quantized_vector)
-
                 current_block_index += 1
                 list_encoded_uv.append(encoded_uv)
 
@@ -156,8 +159,7 @@ def DCT_compute(data_xy,Q='opti'):
 
     return data_uv
 
-
-def DCT_inverse(data_uv):
+def DCT_inverse(data_uv,offset=0):
     """ Reverse-compute the DCT, see the doc of 'DCT_compute' to see wich
     operations are reversed.
 
@@ -168,7 +170,6 @@ def DCT_inverse(data_uv):
     """
     block_per_frame = height//8*width//8+2*height//16*width//16
     block_in_y      = height//8*width//8
-    frame_size      = width*height+2*width//2*height//2
     
     data_uv = np.array(data_uv).flatten()
     
@@ -178,17 +179,15 @@ def DCT_inverse(data_uv):
 
     list_block_xy    = []
     current_block_index = 0
-    pbar = tqdm(total=data_uv.size,desc="DCT inverse")
     block_end_id_prev = 0
     # Runlengh decode, reconstruct block, reverse quantification, reverse DCT
     while block_end_id < data_uv.size:
         block_end_id += 2
         if data_uv[block_end_id-1]==0:
-            pbar.update(block_end_id-block_end_id_prev)
             block_end_id_prev = block_end_id
             encoded_uv = data_uv[block_start_id:block_end_id]
-            quantized_vector     = Runlength_decode(encoded_uv)
-            quantized_block   = quantized_vector[diag_reading].reshape((8,8))
+            quantized_vector = Runlength_decode(encoded_uv)
+            quantized_block  = quantized_vector[diag_reading].reshape((8,8))
             
             if current_block_index%block_per_frame < block_in_y:
                 block_uv = quantized_block*P_lumi*Q
@@ -200,8 +199,8 @@ def DCT_inverse(data_uv):
 
             block_start_id = block_end_id
             block_end_id  += 1
+            
             current_block_index+=1
-    pbar.close()
 
     # Check that there is no error with the number of blocks
     if (current_block_index)%block_per_frame != 0:
@@ -230,7 +229,11 @@ def DCT_inverse(data_uv):
         v_blocks.shape = (height//8//2,width//8//2,8,8)
         data_xy[k,-height*width//4:] = v_blocks.swapaxes(1,2).flatten()
 
-    #data_xy += 128
+    if type(offset) == int :
+        offset = [offset]
+    n = len(offset)
+    for frame_id in range(nb_frames):
+        data_xy[frame_id] += offset[frame_id%n]
     data_xy[data_xy<0]=0
     data_xy[data_xy>255]=255
 
