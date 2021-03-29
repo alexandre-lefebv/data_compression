@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm, trange
 
@@ -29,7 +30,7 @@ def Huffman_code(min_symbol, proba_table, tree_only=False):
     
     def visit_node(prefix,node):
         if type(node)==int: # Leaf
-            code_table[node] = prefix
+            code_table[node-min_symbol] = prefix
         else: # type == tupl, node
             visit_node(prefix+'0',node[0])
             visit_node(prefix+'1',node[1])
@@ -63,7 +64,7 @@ def Huffman_encode(data):
     bitstream+=format(nb_symbols,"b").zfill(9)  # 0,511
     
     # Compute the proba table
-    proba_table,_=np.histogram(data,bins=np.arange(m-0.5,m+nb_symbols+0.5),density=True)
+    proba_table,dummy=np.histogram(data,bins=np.arange(m-0.5,m+nb_symbols+0.5),density=True)
     proba_table = np.array(np.round(proba_table/proba_table.max()*255),dtype=int)
     for proba in proba_table:
         bitstream+=format(proba,"b").zfill(8)
@@ -73,7 +74,18 @@ def Huffman_encode(data):
     
     # Convert symbols into a stream of bits
     for symbol in tqdm(data,desc="Encoding"):
-        bitstream+=code_table[symbol]
+        bitstream+=code_table[symbol-m]
+    
+    #################
+    width = 176
+    height = 144
+    frame_size = width*height + 2*width//2*height//2
+    lengths = np.zeros(data.size)
+    for k,symbol in enumerate(data):
+        lengths[k] = len(code_table[symbol-m])
+    lengths = lengths.reshape(-1,frame_size).sum(axis=1)
+    plt.plot(lengths)
+    #################
     
     return bitstream
 
