@@ -17,6 +17,7 @@ def quality_benchmark(original, decompressed):
     original_frames = original.reshape(nb_frames,frame_size)
     decompressed_frames = decompressed.reshape(nb_frames,frame_size)
     mse_per_frame = np.mean((original_frames-decompressed_frames)**2,axis=1)
+    print("Mean MSE: ",np.mean(mse_per_frame))
     plt.figure()
     plt.title("MSE per frame")
     plt.xlabel("Frame index")
