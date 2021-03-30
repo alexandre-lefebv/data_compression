@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm, trange
 
@@ -31,6 +32,15 @@ def LZW_encode(data):
     dictionary = {(k,):format(k,"b") for k in range(nb_symbols)}
     words_list = []
 
+    #################
+    #width = 176
+    #height = 144
+    #frame_id = 0
+    #symbol_counter = 1
+    #frame_size = width*height + 2*width//2*height//2
+    #lengths = np.zeros(data.size//frame_size)
+    #################
+    
     # Fill the dictionary, list the words
     for k in tqdm(data[1:],desc="Building the dictionary"):
         K = k-m
@@ -44,6 +54,14 @@ def LZW_encode(data):
                 dictionary[new_omega]=format(current_codeword,"b")
             
             words_list.append(dictionary[omega])
+            
+            ###
+            #symbol_counter += len(omega)
+            #lengths[frame_id] += 1
+            #frame_id += symbol_counter//frame_size
+            #symbol_counter %= frame_size
+            ###
+            
             omega = (K,)
         else:
             omega = new_omega
@@ -54,6 +72,9 @@ def LZW_encode(data):
     bitstream += format(codeword_sz,"b").zfill(8)
     for word in tqdm(words_list,desc="Encoding"):
         bitstream += word.zfill(codeword_sz)
+    
+    
+    #plt.plot(lengths*codeword_sz)
     
     return bitstream
 

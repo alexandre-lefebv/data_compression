@@ -77,14 +77,14 @@ def Huffman_encode(data):
         bitstream+=code_table[symbol-m]
     
     #################
-    width = 176
-    height = 144
-    frame_size = width*height + 2*width//2*height//2
-    lengths = np.zeros(data.size)
-    for k,symbol in enumerate(data):
-        lengths[k] = len(code_table[symbol-m])
-    lengths = lengths.reshape(-1,frame_size).sum(axis=1)
-    plt.plot(lengths)
+    #width = 176
+    #height = 144
+    #frame_size = width*height + 2*width//2*height//2
+    #lengths = np.zeros(data.size)
+    #for k,symbol in enumerate(data):
+    #    lengths[k] = len(code_table[symbol-m])
+    #lengths = lengths.reshape(-1,frame_size).sum(axis=1)
+    #plt.plot(lengths)
     #################
     
     return bitstream
