@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import pi, cos
+from tqdm import trange
 
 # Format for qcif images
 width = 176
@@ -87,7 +88,7 @@ def DCT_compute(data_xy,offset=0,Q='opti'):
     # Compute the DCT
     optimal_Q = 0
     list_block_uv = []
-    for k in range(nb_frames):
+    for k in trange(nb_frames,desc="DCT compute"):
         y = data_xy[k,    :sep1].reshape(height,width)
         u = data_xy[k,sep1:sep2].reshape(height//2,width//2)
         v = data_xy[k,sep2:   ].reshape(height//2,width//2)
